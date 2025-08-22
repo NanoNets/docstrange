@@ -1,3 +1,5 @@
+[![MSeeP.ai Security Assessment Badge](https://mseep.net/pr/nanonets-docstrange-badge.png)](https://mseep.ai/app/nanonets-docstrange)
+
 ![DocStrange Banner](https://public-vlms.s3.us-west-2.amazonaws.com/logo3.png)
 
 # <img src="https://public-vlms.s3.us-west-2.amazonaws.com/docstrange_logo.svg" alt="DocStrange" width="32" style="vertical-align: middle; margin-right: 8px;"> DocStrange
