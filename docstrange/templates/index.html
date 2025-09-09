@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocStrange - Document Extraction</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="title-48">DocStrange</h1>
+            <p class="body-big">Extract structured data from documents with AI</p>
+            <div class="free-badge">
+                <span class="badge-free">FREE</span>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-card">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <!-- File Upload Area -->
+                    <div id="fileUploadArea" class="file-upload-area">
+                        <div class="upload-icon">📁</div>
+                        <p class="body-big">Drop your document here or click to browse</p>
+                        <p class="body-normal">PDF, DOCX, XLSX, Images and more - up to 100MB</p>
+                        <input type="file" id="fileInput" accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.png,.jpg,.jpeg,.tiff,.bmp,.ppt,.pptx,.html,.htm" hidden>
+                    </div>
+
+                    <!-- File Info (hidden by default) -->
+                    <div id="fileInfo" class="file-info" style="display: none;">
+                        <div class="file-details">
+                            <span id="fileName" class="file-name"></span>
+                            <span id="fileSize" class="file-size"></span>
+                        </div>
+                        <button type="button" class="btn-remove" onclick="app.removeFile()">✕</button>
+                    </div>
+
+                    <!-- Output Format Selection -->
+                    <div class="form-section">
+                        <h3 class="title-20">Output Format</h3>
+                        <p class="body-normal">Choose how you want to extract your data</p>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="outputFormat" value="markdown" checked>
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">Markdown</span>
+                                    <span class="radio-description">Clean, readable text format with structure</span>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="outputFormat" value="json">
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">JSON</span>
+                                    <span class="radio-description">Structured data format for developers</span>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="outputFormat" value="csv">
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">CSV</span>
+                                    <span class="radio-description">Spreadsheet format for tables and data</span>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="outputFormat" value="html">
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">HTML</span>
+                                    <span class="radio-description">Web format with styling preserved</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Processing Mode Selection -->
+                    <div class="form-section">
+                        <h3 class="title-20">Processing Mode</h3>
+                        <p class="body-normal">Choose how to process your document</p>
+                        <div class="radio-group">
+                            <label class="radio-option">
+                                <input type="radio" name="processingMode" value="cpu" checked>
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">CPU Processing</span>
+                                    <span class="radio-description">Process locally using CPU. Works offline, slower but private.</span>
+                                </div>
+                            </label>
+                            <label class="radio-option">
+                                <input type="radio" name="processingMode" value="gpu">
+                                <span class="radio-custom"></span>
+                                <div class="radio-content">
+                                    <span class="radio-label">GPU Processing</span>
+                                    <span class="radio-description">Process locally using GPU. Fastest local processing, requires CUDA.</span>
+                                </div>
+                            </label>
+                        </div>
+                        <div id="gpuWarning" class="warning-message" style="display: none;">
+                            <div class="warning-content">
+                                <span class="warning-icon">⚠️</span>
+                                <span class="warning-text">GPU not available. Install PyTorch with CUDA support to enable GPU processing.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" id="submitBtn" class="btn btn-primary" disabled>
+                        <span class="btn-text">Extract Document</span>
+                        <div class="spinner" style="display: none;"></div>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Results Section (hidden by default) -->
+            <div id="resultsSection" class="results-card" style="display: none;">
+                <div class="results-header">
+                    <h2 class="title-24">Extraction Results</h2>
+                    <div class="results-meta">
+                        <div class="meta-item">
+                            <span>File Type:</span>
+                            <span id="fileType">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <span>Pages:</span>
+                            <span id="pagesProcessed">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <span>Processing Time:</span>
+                            <span id="processingTime">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <span>Mode:</span>
+                            <span id="processingMode">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-content">
+                    <div class="content-tabs">
+                        <button class="tab-btn active" data-tab="preview">Preview</button>
+                        <button class="tab-btn" data-tab="raw">Raw Output</button>
+                        <button class="tab-btn" data-tab="download">Download</button>
+                    </div>
+
+                    <div class="tab-content">
+                        <div id="preview" class="tab-pane active">
+                            <div id="previewContent" class="preview-content"></div>
+                        </div>
+                        <div id="raw" class="tab-pane">
+                            <pre id="rawContent" class="raw-content"></pre>
+                        </div>
+                        <div id="download" class="tab-pane">
+                            <div class="download-options">
+                                <p class="body-normal">Copy the output or save it to your device:</p>
+                                <button class="btn btn-secondary" onclick="app.copyToClipboard()">Copy to Clipboard</button>
+                                <button class="btn btn-secondary" onclick="app.downloadResult()">Download File</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Supported Formats -->
+            <div class="supported-formats">
+                <h3 class="title-20">Supported Formats</h3>
+                <div class="format-tags">
+                    <span class="format-tag">PDF</span>
+                    <span class="format-tag">DOCX</span>
+                    <span class="format-tag">XLSX</span>
+                    <span class="format-tag">CSV</span>
+                    <span class="format-tag">TXT</span>
+                    <span class="format-tag">PNG</span>
+                    <span class="format-tag">JPG</span>
+                    <span class="format-tag">TIFF</span>
+                    <span class="format-tag">PPTX</span>
+                    <span class="format-tag">HTML</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Error notification (will be injected by JavaScript) -->
+    <div id="errorNotification" style="display: none;"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Initialize the app
+        const app = new DocStrangeApp();
+    </script>
+</body>
+</html>
