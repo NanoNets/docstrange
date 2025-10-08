@@ -995,7 +995,7 @@
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('output_format', format === 'json' ? 'flat-json' : format);
-                formData.append('processing_mode', 'cloud');
+                formData.append('processing_mode', 'cpu');
                 
                 // Show loading state
                 extractBtn.textContent = 'Processing...';
