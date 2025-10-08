@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 from flask import Flask, request, jsonify, render_template, send_from_directory
-from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from .extractor import DocumentExtractor
@@ -60,9 +59,25 @@ def download_models():
         if os.path.exists(test_file_path):
             os.unlink(test_file_path)
 
+def normalize_processing_mode(processing_mode: Optional[str]) -> str:
+    """Map user-provided processing mode to an internal value."""
+    if not processing_mode:
+        return 'cpu'
+
+    normalized = processing_mode.strip().lower()
+
+    if normalized in {'cpu', 'gpu'}:
+        return normalized
+
+    # Treat any legacy labels (like "cloud" or "local") as CPU-only processing.
+    return 'cpu'
+
+
 def create_extractor_with_mode(processing_mode):
     """Create DocumentExtractor with proper error handling for processing mode."""
-    if processing_mode == 'gpu':
+    normalized_mode = normalize_processing_mode(processing_mode)
+
+    if normalized_mode == 'gpu':
         if not check_gpu_availability():
             raise ValueError("GPU mode selected but GPU is not available. Please install PyTorch with CUDA support or use CPU mode.")
         return DocumentExtractor(gpu=True)
@@ -70,7 +85,7 @@ def create_extractor_with_mode(processing_mode):
         return DocumentExtractor(cpu=True)
 
 # Initialize the document extractor
-extractor = DocumentExtractor()
+extractor = DocumentExtractor(cpu=True)
 
 @app.route('/')
 def index():
@@ -96,7 +111,7 @@ def extract_document():
         
         # Get parameters
         output_format = request.form.get('output_format', 'markdown')
-        processing_mode = request.form.get('processing_mode', 'cloud')
+        processing_mode = normalize_processing_mode(request.form.get('processing_mode', 'cpu'))
         
         # Create extractor based on processing mode
         try:

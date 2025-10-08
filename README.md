@@ -105,15 +105,18 @@ Install the library using pip:
 pip install docstrange
 ```
 
-### Deploy the web UI to Fly.io
+### Deploy the web UI to Fly.io (local-only)
 
-The repository now ships with a production-ready `Dockerfile` and `fly.toml` so you can spin up the drag-and-drop interface on [Fly.io](https://fly.io) in minutes. Follow the step-by-step instructions in [`docs/deployment/fly.md`](docs/deployment/fly.md) to:
+The repository now ships with a production-ready `Dockerfile` and `fly.toml` so you can spin up the drag-and-drop interface on [Fly.io](https://fly.io) without touching the DocStrange cloud API. By default the container runs `DocumentExtractor(cpu=True)`, keeping every request on the VM you control.
 
-- Build and run the container locally.
+Follow the step-by-step instructions in [`docs/deployment/fly.md`](docs/deployment/fly.md) to:
+
+- Build and run the container locally before deploying.
 - Launch a Fly app that serves the Flask interface with Gunicorn.
-- Configure secrets (such as `NANONETS_API_KEY`) and proxy traffic back to your machine for local testing.
+- Call `/api/extract` with `processing_mode=cpu` from your own frontend and keep the workload private.
+- (Optional) add secrets if you later decide to use the hosted API.
 
-This is the fastest path to turning DocStrange into a hosted service you can experiment with before rolling out to customers.
+The guide opens with a non-technical checklist so you can deploy, test via `flyctl proxy`, and shut the machine down again in just a few commands.
 
 ## **Quick Start**
 
