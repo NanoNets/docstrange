@@ -195,12 +195,24 @@ def get_system_info():
     
     return jsonify(system_info)
 
-def run_web_app(host='0.0.0.0', port=8000, debug=False):
-    """Run the web application."""
+def run_web_app(host='0.0.0.0', port=8000, debug=False, root_path=''):
+    """Run the web application.
+
+    Args:
+        host: Host to bind to
+        port: Port to bind to
+        debug: Enable debug mode
+        root_path: Root path for the application (e.g., '/docstrange')
+    """
+    # Configure root path if provided
+    if root_path:
+        app.config['APPLICATION_ROOT'] = root_path
+        print(f"📍 Application root path set to: {root_path}")
+
     # Check GPU availability before starting the server
     print("🔍 Checking GPU availability...")
     gpu_available = check_gpu_availability()
-    
+
     if not gpu_available:
         error_msg = (
             "❌ GPU is not available! DocStrange requires GPU for optimal performance.\n"
@@ -214,11 +226,13 @@ def run_web_app(host='0.0.0.0', port=8000, debug=False):
         )
         print(error_msg)
         raise RuntimeError("GPU is not available. DocStrange requires GPU for optimal performance.")
-    
+
     print("✅ GPU detected - proceeding with model download...")
     print("🔄 Downloading models before starting the web interface...")
     download_models()
-    print(f"✅ Starting docstrange web interface at http://{host}:{port}")
+
+    base_url = f"http://{host}:{port}{root_path}" if root_path else f"http://{host}:{port}"
+    print(f"✅ Starting docstrange web interface at {base_url}")
     print("Press Ctrl+C to stop the server")
     app.run(host=host, port=port, debug=debug)
 
