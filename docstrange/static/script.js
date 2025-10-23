@@ -4,6 +4,8 @@ class DocStrangeApp {
     constructor() {
         this.selectedFile = null;
         this.extractionResults = null;
+        // Get root path from global config, default to empty string
+        this.rootPath = window.APP_ROOT_PATH || '';
         this.initializeApp();
     }
 
@@ -14,7 +16,7 @@ class DocStrangeApp {
 
     async loadSystemInfo() {
         try {
-            const response = await fetch('/api/system-info');
+            const response = await fetch(`${this.rootPath}/api/system-info`);
             if (response.ok) {
                 const systemInfo = await response.json();
                 this.updateProcessingModeOptions(systemInfo);
@@ -169,7 +171,7 @@ class DocStrangeApp {
             // Use cloud processing mode by default
             formData.append('processing_mode', 'cloud');
 
-            const response = await fetch('/api/extract', {
+            const response = await fetch(`${this.rootPath}/api/extract`, {
                 method: 'POST',
                 body: formData
             });

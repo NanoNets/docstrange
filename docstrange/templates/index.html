@@ -591,6 +591,12 @@
     </style>
 </head>
 <body>
+    <!-- Root path configuration -->
+    <script>
+        // Global configuration for API paths
+        window.APP_ROOT_PATH = '{{ root_path }}';
+    </script>
+
     <!-- Header -->
     <header class="main-header">
         <div class="header-logo-section">
@@ -996,12 +1002,13 @@
                 formData.append('file', file);
                 formData.append('output_format', format === 'json' ? 'flat-json' : format);
                 formData.append('processing_mode', 'cloud');
-                
+
                 // Show loading state
                 extractBtn.textContent = 'Processing...';
                 extractBtn.disabled = true;
-                
-                fetch('/api/extract', {
+
+                const rootPath = window.APP_ROOT_PATH || '';
+                fetch(`${rootPath}/api/extract`, {
                     method: 'POST',
                     body: formData
                 })

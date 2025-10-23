@@ -75,7 +75,8 @@ extractor = DocumentExtractor()
 @app.route('/')
 def index():
     """Serve the main page."""
-    return render_template('index.html')
+    root_path = app.config.get('APPLICATION_ROOT', '')
+    return render_template('index.html', root_path=root_path)
 
 @app.route('/static/<path:filename>')
 def static_files(filename):
