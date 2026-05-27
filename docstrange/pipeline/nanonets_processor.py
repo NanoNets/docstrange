@@ -128,6 +128,45 @@ class NanonetsDocumentProcessor:
             logger.error(f"Nanonets OCR extraction failed: {e}")
             return ""
     
+    def extract_layout_elements(self, image_path: str) -> List:
+        """Return line-level LayoutElements derived from the Nanonets OCR text output.
+
+        The Nanonets transformer returns structured text (not positional data), so
+        we synthesise spatial coordinates by distributing lines across the image
+        height.  This gives downstream extractors sequential order and approximate
+        y-positions suitable for zone heuristics (title block region, notes section,
+        etc.).
+        """
+        from .layout_detector import LayoutElement
+
+        text = self.extract_text(image_path)
+        if not text:
+            return []
+
+        try:
+            with Image.open(image_path) as img:
+                img_w, img_h = img.size
+        except Exception:
+            img_w, img_h = 1000, 1400  # A4-like fallback
+
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        if not lines:
+            return []
+
+        line_height = max(img_h / len(lines), 15)
+        elements = []
+        for idx, line in enumerate(lines):
+            elements.append(LayoutElement(
+                text=line,
+                x=0,
+                y=int(idx * line_height),
+                width=img_w,
+                height=int(line_height),
+                element_type="paragraph",
+                confidence=0.8,
+            ))
+        return elements
+
     def __del__(self):
         """Cleanup resources."""
-        pass 
+        pass

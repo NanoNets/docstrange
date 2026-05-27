@@ -280,12 +280,108 @@ class NeuralDocumentProcessor:
             if not os.path.exists(image_path):
                 logger.error(f"Image file does not exist: {image_path}")
                 return ""
-            
+
             return self._extract_text_with_layout_advanced(image_path)
-                
+
         except Exception as e:
             logger.error(f"Layout-aware OCR extraction failed: {e}")
             return ""
+
+    def extract_layout_elements(self, image_path: str) -> List:
+        """Return raw LayoutElement objects for engineering drawing extraction.
+
+        Returns the list of positioned text elements before markdown conversion,
+        enabling downstream extractors to apply domain-specific logic.
+        """
+        from .layout_detector import LayoutElement
+
+        if not os.path.exists(image_path):
+            logger.error(f"Image file does not exist: {image_path}")
+            return []
+
+        try:
+            with Image.open(image_path) as img:
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+
+                # Fallback mode: use EasyOCR directly (no layout predictor available)
+                if getattr(self, '_use_fallback_mode', False) or not getattr(self, 'use_advanced_models', False):
+                    return self._extract_layout_elements_easyocr(img)
+
+                layout_results = list(self.layout_predictor.predict(img))
+                text_blocks = []
+
+                for pred in layout_results:
+                    label = pred.get('label', '').lower().replace(' ', '_').replace('-', '_')
+
+                    if all(k in pred for k in ['l', 't', 'r', 'b']):
+                        bbox = [pred['l'], pred['t'], pred['r'], pred['b']]
+                    else:
+                        bbox = pred.get('bbox') or pred.get('box')
+                        if not bbox:
+                            continue
+
+                    region_text = self._extract_text_from_region(img, bbox)
+                    if not region_text or pred.get('confidence', 1.0) < 0.5:
+                        continue
+
+                    if label in ['title', 'section_header', 'subtitle_level_1']:
+                        element_type = 'heading'
+                    elif label == 'list_item':
+                        element_type = 'list_item'
+                    elif label in ['table', 'document_index']:
+                        element_type = 'table'
+                    else:
+                        element_type = 'paragraph'
+
+                    text_blocks.append(LayoutElement(
+                        text=region_text,
+                        x=bbox[0],
+                        y=bbox[1],
+                        width=bbox[2] - bbox[0],
+                        height=bbox[3] - bbox[1],
+                        element_type=element_type,
+                        confidence=pred.get('confidence', 1.0),
+                    ))
+
+                text_blocks.sort(key=lambda el: (el.y, el.x))
+                return text_blocks
+
+        except Exception as e:
+            logger.error(f"extract_layout_elements failed: {e}")
+            return []
+
+    def _extract_layout_elements_easyocr(self, img: "Image.Image") -> List:
+        """Build LayoutElement list from EasyOCR (bbox_points, text, confidence) tuples."""
+        from .layout_detector import LayoutElement
+
+        try:
+            results = self.ocr_reader.readtext(img)
+        except Exception as e:
+            logger.error(f"EasyOCR readtext failed: {e}")
+            return []
+
+        elements = []
+        for (bbox_pts, text, confidence) in results:
+            if confidence < 0.5 or not text.strip():
+                continue
+            # bbox_pts is [[x1,y1],[x2,y1],[x2,y2],[x1,y2]]
+            xs = [pt[0] for pt in bbox_pts]
+            ys = [pt[1] for pt in bbox_pts]
+            x, y = min(xs), min(ys)
+            w, h = max(xs) - x, max(ys) - y
+            elements.append(LayoutElement(
+                text=text,
+                x=x,
+                y=y,
+                width=w,
+                height=h,
+                element_type='paragraph',
+                confidence=confidence,
+            ))
+
+        elements.sort(key=lambda el: (el.y, el.x))
+        return elements
     
     def _extract_text_advanced(self, image_path: str) -> str:
         """Extract text using docling's advanced models."""
