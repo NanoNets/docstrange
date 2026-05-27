@@ -170,19 +170,13 @@ class LayoutDetector:
         return result.strip()
     
     def _post_process_text(self, text: str) -> str:
-        """Post-process text to improve readability."""
-        # Fix common OCR issues
-        text = text.replace('|', 'I')  # Common OCR mistake
-        text = text.replace('0', 'o')  # Common OCR mistake in certain contexts
-        text = text.replace('1', 'l')  # Common OCR mistake in certain contexts
-        
-        # Fix spacing issues
-        text = re.sub(r'\s+', ' ', text)  # Multiple spaces to single space
-        text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', text)  # Fix sentence spacing
-        
-        # Fix common OCR artifacts
-        text = re.sub(r'[^\w\s.,!?;:()[\]{}"\'-]', '', text)  # Remove strange characters
-        
+        """Post-process text to improve readability.
+
+        Engineering safety: do NOT substitute digits or pipe characters — they carry
+        meaning in dimension values (0, 1) and GD&T feature control frames (|⊥|0.5|A|).
+        """
+        text = re.sub(r'\s+', ' ', text)                      # collapse multiple spaces
+        text = re.sub(r'([.!?])\s*([A-Z])', r'\1 \2', text)  # sentence spacing
         return text
     
     def _classify_paragraph(self, text: str) -> str:
