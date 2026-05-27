@@ -25,6 +25,7 @@ __all__ = [
     "FullExtractionResponse",
     "OverlayBBox",
     "OverlayAnnotation",
+    "OverlaySummary",
     "OverlayImageSize",
     "OverlayResponse",
     # Re-exported schema types used as list element response models
@@ -56,15 +57,20 @@ class OverlayBBox(BaseModel):
 
 
 class OverlayAnnotation(BaseModel):
-    id: str
+    change_id: str
     type: str
     text: str
     page: int
     confidence: float
-    bbox_pixels: OverlayBBox
+    bbox: OverlayBBox
     bbox_normalized: OverlayBBox
     color: str
     label: str
+
+
+class OverlaySummary(BaseModel):
+    by_type: Dict[str, int]
+    total: int
 
 
 class OverlayImageSize(BaseModel):
@@ -76,4 +82,5 @@ class OverlayResponse(BaseModel):
     image_size: OverlayImageSize
     page_filter: Optional[int] = None
     total_annotations: int
+    summary: OverlaySummary
     annotations: List[OverlayAnnotation]

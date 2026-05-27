@@ -1,6 +1,5 @@
 """Overlay JSON generator for UI rendering of engineering drawing extractions."""
 
-import uuid
 from typing import Any, Dict, List, Optional
 
 
@@ -30,33 +29,38 @@ def _normalize_bbox(x: float, y: float, w: float, h: float, img_w: int, img_h: i
     return {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
 
 
-def _annotation_from_element(el, img_w: int, img_h: int) -> Dict[str, Any]:
+def _annotation_from_element(el, img_w: int, img_h: int, seq: int) -> Dict[str, Any]:
     """Build one overlay annotation from any extracted element.
 
     Works with ExtractionElement subclasses (DimensionElement, TitleBlockField,
     NoteElement, GDTElement) and with BOMRow / RevisionEntry — all carry .text,
     .type, .confidence, .bbox, and .page after Phase 2.
+
+    ``seq`` is the 1-based position in the final annotation list; it produces a
+    stable ``change_id`` (``chg_001`` etc.) that is consistent across re-runs
+    for the same extraction result ordering.
     """
     annotation_type = str(getattr(el, "type", "unknown"))
     bbox = el.bbox
     text = str(getattr(el, "text", ""))
+    bbox_pixels = {
+        "x":      float(bbox.x),
+        "y":      float(bbox.y),
+        "width":  float(bbox.width),
+        "height": float(bbox.height),
+    }
     return {
-        "id":         str(uuid.uuid4()),
-        "type":       annotation_type,
-        "text":       text,
-        "page":       int(getattr(el, "page", 1)),
-        "confidence": round(float(el.confidence), 4),
-        "bbox_pixels": {
-            "x":      float(bbox.x),
-            "y":      float(bbox.y),
-            "width":  float(bbox.width),
-            "height": float(bbox.height),
-        },
+        "change_id":       f"chg_{seq:03d}",
+        "type":            annotation_type,
+        "text":            text,
+        "page":            int(getattr(el, "page", 1)),
+        "confidence":      round(float(el.confidence), 4),
+        "bbox":            bbox_pixels,
         "bbox_normalized": _normalize_bbox(
             bbox.x, bbox.y, bbox.width, bbox.height, img_w, img_h
         ),
-        "color": _COLOR_MAP.get(annotation_type, _COLOR_MAP["unknown"]),
-        "label": text[:60],
+        "color":           _COLOR_MAP.get(annotation_type, _COLOR_MAP["unknown"]),
+        "label":           text[:60],
     }
 
 
@@ -109,14 +113,21 @@ class OverlayGenerator:
         )
 
         annotations: List[Dict] = []
+        seq = 0
         for el in all_elements:
             if page is not None and int(getattr(el, "page", 1)) != page:
                 continue
-            annotations.append(_annotation_from_element(el, image_width, image_height))
+            seq += 1
+            annotations.append(_annotation_from_element(el, image_width, image_height, seq))
+
+        by_type: Dict[str, int] = {}
+        for ann in annotations:
+            by_type[ann["type"]] = by_type.get(ann["type"], 0) + 1
 
         return {
             "image_size":        {"width": image_width, "height": image_height},
             "page_filter":       page,
             "total_annotations": len(annotations),
+            "summary":           {"by_type": by_type, "total": len(annotations)},
             "annotations":       annotations,
         }
