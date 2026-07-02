@@ -53,10 +53,25 @@ class CloudConversionResult(ConversionResult):
                     'file': (os.path.basename(self.file_path), file, self.cloud_processor._get_content_type(self.file_path))
                 }
                 
-                data = {
-                    'output_type': output_type
+                # The /api/v1/extract/sync endpoint expects `output_format`
+                # (markdown|html|json|csv). Map from the legacy `output_type`
+                # vocabulary; `flat-json` and the specified-* variants map to
+                # the `json` output format on the new API. `output_type` is kept
+                # for backward compatibility with any older endpoint.
+                _fmt_map = {
+                    "markdown": "markdown",
+                    "html": "html",
+                    "csv": "csv",
+                    "flat-json": "json",
+                    "specified-fields": "json",
+                    "specified-json": "json",
                 }
-                
+                output_format = _fmt_map.get(output_type, "markdown")
+                data = {
+                    'output_type': output_type,
+                    'output_format': output_format,
+                }
+
                 # Add model_type if specified
                 if self.cloud_processor.model_type:
                     data['model_type'] = self.cloud_processor.model_type
@@ -82,8 +97,24 @@ class CloudConversionResult(ConversionResult):
                     timeout=300
                 )
                 
-                # Handle rate limiting (429) specifically
+                # Handle HTTP 429 responses. A 429 does NOT always mean the
+                # rate limit was hit: a deprecated endpoint returns 429 with a
+                # body like {"detail": "The /extract endpoint is deprecated.
+                # Please migrate to /api/v1/extract."}. Inspect the body before
+                # assuming a quota problem so we never surface a misleading
+                # "Rate limit exceeded" error when the real cause is different.
                 if response.status_code == 429:
+                    detail = self.cloud_processor._parse_error_detail(response)
+
+                    if detail and self.cloud_processor._is_deprecation_notice(detail):
+                        error_msg = (
+                            f"The cloud extraction endpoint returned a deprecation "
+                            f"notice: {detail}. Please upgrade docstrange to a version "
+                            f"that targets the current API endpoint."
+                        )
+                        logger.error(error_msg)
+                        raise ConversionError(error_msg)
+
                     if not self.cloud_processor.api_key:
                         error_msg = (
                             "Rate limit exceeded for free tier (limited calls daily). "
@@ -93,13 +124,17 @@ class CloudConversionResult(ConversionResult):
                             "  - Python: DocumentExtractor()  # after login (uses cached credentials)\n"
                             "  - Python: DocumentExtractor(api_key='YOUR_API_KEY')  # alternative"
                         )
+                        if detail:
+                            error_msg += f"\nServer said: {detail}"
                         logger.error(error_msg)
                         raise ConversionError(error_msg)
                     else:
                         error_msg = "Rate limit exceeded (10k/month). Please try again later."
+                        if detail:
+                            error_msg += f" Server said: {detail}"
                         logger.error(error_msg)
                         raise ConversionError(error_msg)
-                
+
                 response.raise_for_status()
                 result_data = response.json()
                 
@@ -230,8 +265,12 @@ class CloudProcessor(BaseProcessor):
         self.model_type = model_type
         self.specified_fields = specified_fields
         self.json_schema = json_schema
-        self.api_url = "https://extraction-api.nanonets.com/extract"
-        
+        # Nanonets deprecated the bare /extract endpoint: it now returns HTTP
+        # 429 with body {"detail": "The /extract endpoint is deprecated. Please
+        # migrate to /api/v1/extract."}. Target the current sync endpoint so a
+        # deprecation notice is not misread as a rate-limit/quota error.
+        self.api_url = "https://extraction-api.nanonets.com/api/v1/extract/sync"
+
         # Don't validate output_type during initialization - it will be validated during processing
         # This prevents warnings during DocumentExtractor initialization
     
@@ -285,17 +324,69 @@ class CloudProcessor(BaseProcessor):
             metadata=metadata
         )
     
-    def _extract_content_from_response(self, response_data: Dict[str, Any]) -> str:
-        """Extract content from API response."""
+    @staticmethod
+    def _parse_error_detail(response: requests.Response) -> str:
+        """Best-effort extraction of a human-readable error message from a response.
+
+        Nanonets error bodies use a JSON ``{"detail": "..."}`` shape; fall back
+        to the raw (truncated) text for anything else.
+        """
         try:
-            # API always returns content in the 'content' field
+            body = response.json()
+        except ValueError:
+            return (response.text or "").strip()[:500]
+        if isinstance(body, dict):
+            for key in ("detail", "message", "error"):
+                value = body.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        return json.dumps(body)[:500]
+
+    @staticmethod
+    def _is_deprecation_notice(detail: str) -> bool:
+        """Return True when an error message describes a deprecated endpoint."""
+        lowered = detail.lower()
+        return "deprecated" in lowered or "migrate to" in lowered
+
+    def _extract_content_from_response(self, response_data: Dict[str, Any]) -> str:
+        """Extract content from API response.
+
+        Supports both the legacy flat shape (top-level ``content``) and the
+        current /api/v1/extract/sync nested shape::
+
+            {"success": true,
+             "result": {"markdown": {"content": "..."}, "html": ..., ...},
+             "output_format": "markdown"}
+        """
+        try:
+            # Legacy shape: top-level 'content' field.
             if 'content' in response_data:
                 return response_data['content']
-            
+
+            # Current /api/v1/extract/sync shape: content lives under
+            # result.<format>.content (or result.<format> when it's a string).
+            result = response_data.get('result')
+            if isinstance(result, dict):
+                requested_format = response_data.get('output_format')
+                candidates = []
+                # Prefer the block matching the requested output_format.
+                if requested_format and requested_format in result:
+                    candidates.append(result[requested_format])
+                candidates.extend(
+                    result[key]
+                    for key in ("markdown", "html", "csv", "json")
+                    if key in result and result[key] is not None
+                )
+                for block in candidates:
+                    if isinstance(block, dict) and block.get('content') is not None:
+                        return block['content']
+                    if isinstance(block, str):
+                        return block
+
             # Fallback: return whole response as JSON if no content field
             logger.warning("No 'content' field found in API response, returning full response")
             return json.dumps(response_data, indent=2)
-            
+
         except Exception as e:
             logger.error(f"Failed to extract content from API response: {e}")
             return json.dumps(response_data, indent=2)
